@@ -6,10 +6,10 @@ const Companion = require("./schema/Companion");
 const Doctor = require("./schema/Doctor");
 
 const express = require("express");
+const { forEach } = require("lodash");
+const FavoriteDoctor = require("./schema/FavoriteDoctor");
+const FavoriteCompanion = require("./schema/FavoriteCompanion");
 const router = express.Router();
-
-const fDoctor = []
-const fCompanion = []
 
 
 // completely resets your database.
@@ -49,56 +49,91 @@ router.route("/doctors")
     })
     .post((req, res) => {
         console.log("POST /doctors");
-        newDoctor = new Doctor(req.body).create()
+        Doctor.create(req.body).save()
             .then(data => {
                 res.status(201).send(data);
             })
             .catch(err => {
-                res.status(400).send();
+                res.status(500).send(err);
             });
     });
 
 router.route("/doctors/favorites")
     .get((req, res) => {
         console.log(`GET /doctors/favorites`);
-        if (fDoctor.length == 0) {
-            res.status(204).send(fDoctor);
-        } else {
-            Doctor.find({ '_id' : { $in : fDoctor }})
-                .then(data => {
-                    res.status(200).send(data);
-                })
-                .catch(err => {
-                    res.status(500).send(err);
-                })
-        }
+        FavoriteDoctor.find({}, 'doctor')
+            .then(data => {
+                const ids = data.map(el => el.doctor)
+                Doctor.find({'_id' :{$in : ids}})
+                    .then(output => {
+                        res.status(200).send(output);
+                    })
+                    .catch(erro => {
+                        res.status(500).send(erro);
+                    })
+            })
+            .catch(err => {
+                res.status(500).send(err);
+            });
     })
     .post((req, res) => {
         console.log(`POST /doctors/favorites`);
-        Doctor.findById(req.body.id)
+        Doctor.findById(req.body.doctor_id)
             .then(doc => {
-                if (doc == null) {
-                    res.status(404).send();
-                } else {
-                    fDoctor.push(req.body.id);
-                    res.status(200).send(doc);
-                }
+                FavoriteDoctor.exists({ "doctor" : doc._id })
+                    .then(exi => {
+                        if (exi) {
+                            res.status(500).send(doc);
+                        } else {
+                            FavoriteDoctor.create(doc._id).save()
+                                .then(() => {
+                                    res.status(201).send(doc);
+                                })
+                                .catch(erro => {
+                                    res.status(500).send(erro);
+                                });
+                        }
+                    })
             })
             .catch(err => {
-                res.status(404).send(err);
+                res.status(500).send(err);
             })
     });
 
 router.route("/doctors/favorites/:id")
+    .get((req, res) => {
+        console.log(`GET /doctors/favorites/:id`);
+        FavoriteDoctor.findOne({'doctor' : req.params.id})
+            .then(fdoc => {
+                if (fdoc == null) {
+                    res.status(404).send();
+                    return;
+                }
+                Doctor.findById(req.params.id)
+                    .then(data => {
+                        res.status(200).send(data);
+                    })
+                    .catch(erro => {
+                        res.status(404).send(erro);
+                    })
+            })
+            .catch(err => {
+                res.status(404).send(err);
+            })
+    }) 
     .delete((req, res) => {
         console.log(`DELETE /doctors/favorites/:id`);
-        var i = fDoctor.findIndex(e => e == req.params.id);
-        if (i == -1) {
-            res.status(404).send();
-        } else {
-            fDoctor.splice(i, 1);
-            res.status(200).send();
-        }
+        FavoriteDoctor.findOneAndDelete({'doctor' : req.params.id})
+            .then(data => {
+                if (data == null) {
+                    res.status(404).send();
+                    return;
+                }
+                res.status(200).send();
+            })
+            .catch(err => {
+                res.status(404).send(err);
+            });
     });
     
 router.route("/doctors/:id")
@@ -192,7 +227,7 @@ router.route("/doctors/:id/goodparent")
                         if (data == null) {
                             res.status(204).send();
                         } else {
-                            res.status(200).send(data.every(c => c === true));
+                            res.status(200).send(data.every(c => c.alive == true));
                         }
                     })
             })
@@ -215,12 +250,12 @@ router.route("/companions")
     })
     .post((req, res) => {
         console.log("POST /companions");
-        newComp = new Companion(req.body).create()
+        Companion.create(req.body).save()
             .then(data => {
                 res.status(201).send(data);
             })
             .catch(err => {
-                res.status(400).send();
+                res.status(500).send(err);
             });
     });
 
@@ -243,44 +278,79 @@ router.route("/companions/crossover")
 router.route("/companions/favorites")
     .get((req, res) => {
         console.log(`GET /companions/favorites`);
-        if (length(fCompanion) == 0) {
-            res.status(204).send(fDoctor);
-        } else {
-            Companion.find({ '_id' : { $in : fCompanion }})
-                .then(data => {
-                    res.status(200).send(data);
-                })
-                .catch(err => {
-                    res.status(500).send(err);
-                })
-        }
+        FavoriteCompanion.find({}, 'companion')
+            .then(data => {
+                const ids = data.map(el => el.companion)
+                Companion.find({'_id' : {$in : ids}})
+                    .then(output => {
+                        res.status(200).send(output);
+                    })
+                    .catch(erro => {
+                        res.status(500).send(erro);
+                    })
+            })
+            .catch(err => {
+                res.status(500).send(err);
+            });
     })
     .post((req, res) => {
         console.log(`POST /companions/favorites`);
-        Companion.findById(req.body.id)
+        Companion.findById(req.body.companion_id)
             .then(comp => {
-                if (comp == null) {
-                    res.status(404).send();
-                } else {
-                    fCompanion.push(req.body.id);
-                    res.status(200).send(comp);
-                }
+                FavoriteCompanion.exists({ "companion" : comp._id })
+                    .then(alrexists => {
+                        if (alrexists) {
+                            res.status(500).send(comp);
+                        } else {
+                            FavoriteCompanion.create(comp._id).save()
+                                .then(() => {
+                                    res.status(201).send(comp);
+                                })
+                                .catch(erro => {
+                                    res.status(500).send(erro);
+                                });
+                        }
+                    })
             })
             .catch(err => {
-                res.status(404).send(err);
+                res.status(500).send(err);
             })
     })
 
 router.route("/companions/favorites/:id")
+    .get((req, res) => {
+        console.log(`GET /companions/favorites/:id`);
+        FavoriteCompanion.findOne({'companion' : req.params.id})
+            .then(fcomp => {
+                if (fcomp == null) {
+                    res.status(404).send();
+                    return;
+                }
+                Companion.findById(req.params.id)
+                    .then(data => {
+                        res.status(200).send(data);
+                    })
+                    .catch(erro => {
+                        res.status(404).send(erro);
+                    })
+            })
+            .catch(err => {
+                res.status(404).send(err);
+            })
+    }) 
     .delete((req, res) => {
         console.log(`DELETE /companions/favorites/:id`);
-        var i = fCompanion.findIndex(e => e == req.params.id);
-        if (i == -1) {
-            res.status(404).send();
-        } else {
-            fCompanion.splice(i, 1);
-            res.status(200).send();
-        }
+        FavoriteCompanion.findOneAndDelete({'companion' : req.params.id})
+            .then(data => {
+                if (data == null) {
+                    res.status(404).send();
+                    return;
+                }
+                res.status(200).send();
+            })
+            .catch(err => {
+                res.status(404).send(err);
+            });
     });
 
 router.route("/companions/:id")
@@ -305,7 +375,10 @@ router.route("/companions/:id")
                 if (data == null) {
                     res.status(404).send();
                 } else {
-                    res.status(200).send(data);
+                    Companion.findById(req.params.id)
+                        .then(comp => { 
+                            res.status(200).send(comp); 
+                        });
                 }
             })
             .catch(err => {
@@ -318,12 +391,12 @@ router.route("/companions/:id")
             .then(data => {
                 if (data == null) {
                     res.status(404).send();
-                } else {
-                    res.status(200).send();
+                    return;
                 }
+                res.status(200).send();
             })
             .catch(err => {
-                res.status(500).send();
+                res.status(404).send(err);
             });
     });
 
@@ -332,21 +405,17 @@ router.route("/companions/:id/doctors")
         console.log(`GET /companions/${req.params.id}/doctors`);
         Companion.findById(req.params.id, 'doctors')
             .then(data => {
-                if (data == null) {
-                    res.status(404).send();
-                } else {
-                    Doctors.find({ '_id' : {$in : data}})
-                        .then(output => {
-                            res.status(200).send(output);
-                        })
-                        .catch(err => {
-                            res.status(204).send();
-                        });
-                }
+                Doctor.find({ '_id' : {$in : data.doctors}})
+                    .then(output => {
+                        res.status(200).send(output);
+                    })
+                    .catch(erro => {
+                        res.status(204).send(erro);
+                    });
             })
             .catch(err => {
                 res.status(404).send(err);
-            })
+            });
     });
 
 router.route("/companions/:id/friends")
@@ -354,26 +423,17 @@ router.route("/companions/:id/friends")
         console.log(`GET /companions/${req.params.id}/friends`);
         Companion.findById(req.params.id, 'seasons')
             .then(data => {
-                if (data == null) {
-                    res.status(404).send();
-                } else {
-                    Companion.find({ '_id' : { $not : req.params.id }, 'seasons' : { $elemMatch: { $in : data }}})
-                        .then(output => {
-                            res.status(200).send(output);
-                        })
-                        .catch(erro => {
-                            res.status(204).send(`Companion ${req.params.id} has no friends.`)
-                        })
-                }
+                Companion.find({ '_id' : { $not : { $eq : req.params.id }}, 'seasons' : { $elemMatch : { $in : data.seasons }}})
+                    .then(output => {
+                        res.status(200).send(output);
+                    })
+                    .catch(erro => {
+                        res.status(204).send(erro)
+                    })
             }) 
             .catch(err => {
-                res.status(404).send();
+                res.status(404).send(err);
             });
     });
-
-//////////////////
-// EXTRA CREDIT //
-//////////////////
-// copied above
 
 module.exports = router;
